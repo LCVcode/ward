@@ -12,3 +12,8 @@ wheels/
 # Snap build artifacts
 snap/.snapcraft/
 *.snap
+
+# ward-managed-begin
+workshop.yaml
+.workshop.lock
+# ward-managed-end
