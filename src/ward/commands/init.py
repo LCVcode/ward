@@ -22,6 +22,16 @@ from ward import manifest
 from ward.errors import die, info
 from ward.preflight import PreflightFailure, collect_failures, report_and_exit
 
+GITIGNORE_FILENAME = ".gitignore"
+GITIGNORE_BLOCK_BEGIN = "# ward-managed-begin"
+GITIGNORE_BLOCK_END = "# ward-managed-end"
+GITIGNORE_BLOCK = (
+    f"\n{GITIGNORE_BLOCK_BEGIN}\n"
+    "workshop.yaml\n"
+    ".workshop.lock\n"
+    f"{GITIGNORE_BLOCK_END}\n"
+)
+
 EXIT_NO_GIT = 64
 EXIT_BAD_MANIFEST_NAME = 73
 
@@ -108,6 +118,16 @@ def _write_agents_md_if_missing(project_dir: Path) -> None:
     info("[INFO] Created AGENTS.md placeholder for agent context memory.")
 
 
+def _update_gitignore(project_dir: Path) -> None:
+    """Append the ward-managed block to .gitignore if not already present."""
+    target = project_dir / GITIGNORE_FILENAME
+    existing = target.read_text(encoding="utf-8") if target.exists() else ""
+    if GITIGNORE_BLOCK_BEGIN in existing:
+        return
+    target.write_text(existing + GITIGNORE_BLOCK, encoding="utf-8")
+    info("[INFO] Updated .gitignore with ward artifact entries.")
+
+
 def run() -> None:
     cwd = Path.cwd()
 
@@ -118,5 +138,6 @@ def run() -> None:
     # Phase 2: mutations. Only reached when every check passed.
     _write_manifest_if_missing(cwd)
     _write_agents_md_if_missing(cwd)
+    _update_gitignore(cwd)
     info("[INFO] Ward environment initialised. Run 'ward up' to launch your "
          "sandboxed OpenCode session.")

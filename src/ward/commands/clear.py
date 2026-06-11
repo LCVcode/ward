@@ -15,11 +15,12 @@ Defensive behaviour:
 
 from __future__ import annotations
 
+import re
 import shutil
 from pathlib import Path
 
 from ward import manifest, workshop
-from ward.commands.init import AGENTS_FILENAME
+from ward.commands.init import AGENTS_FILENAME, GITIGNORE_BLOCK_BEGIN, GITIGNORE_BLOCK_END
 from ward.errors import die, info
 
 EXIT_CONTAINER_EXISTS = 80
@@ -78,5 +79,27 @@ def run() -> None:
 
     for name in removed:
         info(f"[INFO] Removed {name}.")
+
+    _clean_gitignore(cwd)
+
     info("[INFO] Ward files cleared. Run 'ward init' to re-provision this "
          "project.")
+
+
+def _clean_gitignore(project_dir: Path) -> None:
+    """Remove the ward-managed block from .gitignore if present."""
+    target = project_dir / ".gitignore"
+    if not target.exists():
+        return
+    existing = target.read_text(encoding="utf-8")
+    if GITIGNORE_BLOCK_BEGIN not in existing:
+        return
+    # Strip the block including its surrounding newline, leaving the rest intact.
+    cleaned = re.sub(
+        rf"\n?{re.escape(GITIGNORE_BLOCK_BEGIN)}\n.*?{re.escape(GITIGNORE_BLOCK_END)}\n?",
+        "",
+        existing,
+        flags=re.DOTALL,
+    )
+    target.write_text(cleaned, encoding="utf-8")
+    info("[INFO] Removed ward entries from .gitignore.")

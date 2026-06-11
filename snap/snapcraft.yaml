@@ -1,0 +1,42 @@
+name: ward
+version: "0.0.0"
+summary: Infrastructure coordinator for Canonical Workshop VMs and OpenCode agents
+description: |
+  ward manages the lifecycle of Canonical Workshop VMs (LXD containers) and
+  orchestrates OpenCode AI agent execution within per-project sandboxes.
+
+  Run 'ward init' inside a Git repository to provision a workshop.yaml
+  blueprint and seed AGENTS.md for version-controlled AI context memory.
+  Run 'ward up' to launch a pre-authenticated, isolated OpenCode session.
+
+  ward requires Canonical Workshop and OpenCode to be installed on the host.
+  Install Workshop via: sudo snap install workshop
+
+base: core24
+grade: devel
+confinement: classic
+
+apps:
+  ward:
+    command: bin/ward
+    environment:
+      PYTHONHOME: $SNAP/usr
+      PYTHONPATH: $SNAP/usr/lib/python3/dist-packages:$SNAP/usr/lib/python3.13
+
+parts:
+  ward:
+    plugin: python
+    source: .
+    # The python plugin will call pip under the hood. We override the build
+    # to explicitly use Python 3.13 (staged from Ubuntu 24.04 universe) so
+    # that the requires-python = ">=3.13" constraint in pyproject.toml is met.
+    # core24's default python3 is 3.12.
+    python-packages:
+      - pip
+    stage-packages:
+      - python3.13
+      - python3.13-minimal
+      - python3-pip
+    override-build: |
+      python3.13 -m pip install --prefix="$SNAPCRAFT_PART_INSTALL" .
+      craftctl default
