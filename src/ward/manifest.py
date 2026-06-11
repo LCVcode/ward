@@ -21,6 +21,8 @@ MANIFEST_CONTENT = """\
 name: ward
 base: ubuntu@24.04
 sdks:
+  - name: uv
+    channel: latest/stable
   - name: opencode
     channel: latest/stable
 
