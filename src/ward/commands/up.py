@@ -14,7 +14,7 @@ import os
 from pathlib import Path
 
 from ward import manifest, workshop
-from ward.errors import die, info
+from ward.errors import die, info, warn
 from ward.preflight import OPENCODE_CONFIG_DIR, run_preflight
 
 EXIT_STATUS_QUERY_FAILED = 71
@@ -25,6 +25,13 @@ OPENCODE_DATA_DIR = Path("~/.local/share/opencode").expanduser()
 
 CONFIG_PLUG = "opencode:opencode-config"
 DATA_PLUG = "opencode:opencode-data"
+
+# Host git configuration is copied into the sandbox so the agent commits with
+# the operator's identity (user.name/user.email) and inherits their git
+# settings (url rewrites, default branch, editor, ...). Auth itself flows
+# through the forwarded ssh-agent, not this file.
+GITCONFIG_HOST = Path("~/.gitconfig").expanduser()
+GITCONFIG_TARGET = "/home/workshop/.gitconfig"
 
 
 def _ensure_manifest(project_dir: Path) -> None:
@@ -129,6 +136,37 @@ def _handoff() -> None:
     os.execvp(argv[0], argv)  # pragma: no cover — replaces process
 
 
+def _inject_git_config(project_dir: Path) -> None:
+    """Copy the host's ~/.gitconfig into the running sandbox.
+
+    Without this the sandboxed agent has no git identity and cannot create
+    commits. Auth is handled separately via the forwarded ssh-agent.
+
+    Best-effort: a missing host config is skipped silently, and an injection
+    failure warns but does not abort the session (the agent can still run;
+    only the git identity/config would be absent).
+    """
+    if not GITCONFIG_HOST.is_file():
+        return
+    try:
+        content = GITCONFIG_HOST.read_text(encoding="utf-8")
+    except OSError as exc:
+        warn(f"[WARN] Could not read {GITCONFIG_HOST}: {exc}. "
+             "Skipping git config injection.")
+        return
+
+    result = workshop.write_file(GITCONFIG_TARGET, content, project_dir)
+    if result.ok:
+        info("[INFO] Injected host git configuration into the ward sandbox.")
+    else:
+        warn(
+            "[WARN] Failed to inject git configuration into the sandbox; "
+            "commits inside it may need 'git config user.name/user.email' set "
+            "manually."
+            + (f"\n{result.stderr.strip()}" if result.stderr.strip() else "")
+        )
+
+
 def run() -> None:
     run_preflight()
     cwd = Path.cwd()
@@ -136,5 +174,6 @@ def run() -> None:
     _ensure_launched_and_stopped(cwd)
     _hydrate(cwd)
     _start(cwd)
+    _inject_git_config(cwd)
     info("[INFO] Handing off to OpenCode inside the ward sandbox...")
     _handoff()

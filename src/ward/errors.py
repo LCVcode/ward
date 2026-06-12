@@ -19,3 +19,8 @@ def die(code: int, message: str) -> NoReturn:
 def info(message: str) -> None:
     """Print an informational message to stdout."""
     print(message)
+
+
+def warn(message: str) -> None:
+    """Print a non-fatal warning to stderr (does not exit)."""
+    print(message, file=sys.stderr)

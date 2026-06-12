@@ -161,6 +161,42 @@ def remount(
     )
 
 
+# ---------- in-workshop file writes ----------
+
+def write_file(
+    target_path: str,
+    content: str,
+    project_dir: Path,
+    timeout: float | None = None,
+) -> CommandResult:
+    """Write ``content`` to ``target_path`` inside the workshop.
+
+    Runs ``workshop exec -I ward -- tee <target_path>`` non-interactively,
+    feeding ``content`` on stdin. The workshop must be ``Ready`` (or
+    ``Waiting``) for ``exec`` to be accepted.
+
+    ``tee`` echoes stdin to stdout as well; that captured output is ignored
+    by callers, which only inspect the returned :class:`CommandResult`.
+    """
+    proc = subprocess.run(
+        [
+            "workshop", "exec", "-I", WORKSHOP_NAME,
+            "-p", str(project_dir),
+            "--", "tee", target_path,
+        ],
+        input=content,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+        check=False,
+    )
+    return CommandResult(
+        returncode=proc.returncode,
+        stdout=proc.stdout or "",
+        stderr=proc.stderr or "",
+    )
+
+
 # ---------- handoff ----------
 
 def run_action_argv(action: str) -> list[str]:
