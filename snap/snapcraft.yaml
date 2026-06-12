@@ -1,5 +1,4 @@
 name: ward
-version: "0.1.2"
 summary: Infrastructure coordinator for Canonical Workshop VMs and OpenCode agents
 description: |
   ward manages the lifecycle of Canonical Workshop VMs (LXD containers) and
@@ -12,48 +11,64 @@ description: |
   ward requires Canonical Workshop and OpenCode to be installed on the host.
   Install Workshop via: sudo snap install workshop
 
+# Version is adopted from pyproject.toml at build time (see the ward part's
+# override-pull below), keeping a single source of truth for the version.
+adopt-info: ward
 base: core24
 grade: devel
+# ward is a host orchestrator: it execs other host/snap binaries (workshop,
+# opencode) and operates on arbitrary project directories. Strict confinement
+# cannot do that, so classic confinement is required.
 confinement: classic
+
+platforms:
+  amd64:
 
 apps:
   ward:
     command: bin/ward
     environment:
-      PYTHONHOME: $SNAP/usr
-      PYTHONPATH: $SNAP/usr/lib/python3/dist-packages:$SNAP/usr/lib/python3.12
+      # The plugin rewrites the entry-point shebang to "#!/usr/bin/env
+      # python3". Prepend the venv's bin so it resolves to the bundled
+      # interpreter ($SNAP/bin/python3 -> usr/bin/python3.12) instead of the
+      # host's python3. The host PATH is preserved (appended), so ward can
+      # still locate the host 'workshop' and 'opencode' binaries.
+      PATH: $SNAP/bin:$PATH
 
 parts:
   ward:
     plugin: python
     source: .
-    # The python plugin will call pip under the hood. We override the build
-    # to explicitly use Python 3.12, which is the interpreter shipped by
-    # core24 (Ubuntu 24.04). ward's requires-python = ">=3.12" is satisfied
-    # by this stock interpreter, so no out-of-archive Python is needed.
-    python-packages:
-      - pip
-    # core24's build chroot ships only python3.12-minimal, which lacks the
-    # stdlib C-extensions (_decimal, _contextvars, ...) provided by
-    # libpython3.12-stdlib. The override-build below invokes python3.12
-    # directly, so we must pull a complete interpreter into the BUILD
-    # environment via build-packages (stage-packages only populate the
-    # snap's runtime payload, not the build chroot).
-    build-packages:
-      - python3.12
+    # Classic snaps cannot use the base snap's Python interpreter, so the
+    # interpreter AND the standard library must be bundled in the payload.
+    # The python plugin builds a virtualenv and finds the staged interpreter
+    # automatically; the venv's pyvenv.cfg is repointed at the bundled
+    # interpreter in override-build below (the plugin leaves it at /usr/bin).
     stage-packages:
-      - python3.12
-      - python3.12-minimal
-      - python3-pip
-    override-build: |
-      # The python plugin prepends the part's staged tree to PATH, so a bare
-      # "python3.12" resolves to the staged interpreter under
-      # $CRAFT_PART_INSTALL — which lacks the stdlib C-extension dynload
-      # (_decimal, _contextvars, ...) because libpython3.12-stdlib is a
-      # filtered base package and is not re-staged. We therefore invoke the
-      # build environment's complete interpreter by absolute path
-      # (/usr/bin/python3.12, pulled in via build-packages) to run pip, and
-      # clear PYTHON* so craft's venv-oriented env can't redirect it. craftctl
-      # default still runs with the original craft-managed environment.
-      env -u PYTHONHOME -u PYTHONPATH /usr/bin/python3.12 -m pip install --prefix="$SNAPCRAFT_PART_INSTALL" .
+      - python3.12-minimal      # /usr/bin/python3.12 + minimal runtime
+      - libpython3.12-minimal   # core stdlib (encodings, codecs, ...)
+      - libpython3.12-stdlib    # full stdlib + lib-dynload C-extensions
+    # The bundled python3.12 is built against core24's glibc (2.39). Under
+    # classic confinement the snap runs against host libraries, so the ELF
+    # interpreter/rpath must be patched to the core24 base
+    # (/snap/core24/current/...) to remain portable to older hosts.
+    build-attributes:
+      - enable-patchelf
+    # Derive the snap version from pyproject.toml's [project] version.
+    override-pull: |
       craftctl default
+      craftctl set version="$(sed -n 's/^version = "\(.*\)"/\1/p' pyproject.toml | head -1)"
+    # Run the plugin's normal build (creates the venv + installs ward), then
+    # repoint pyvenv.cfg at the bundled interpreter. The plugin builds the venv
+    # with the build host's python3, leaving home=/usr/bin (correct for strict
+    # snaps that use the base's Python, wrong for classic). Fixing it here in
+    # the build step (rather than override-prime) keeps the enable-patchelf
+    # prime step intact. At runtime this makes the venv resolve the bundled
+    # stdlib (via home) and ward's site-packages (via the venv prefix).
+    override-build: |
+      craftctl default
+      sed -i \
+        -e 's|^home = .*|home = /snap/ward/current/usr/bin|' \
+        -e 's|^executable = .*|executable = /snap/ward/current/usr/bin/python3.12|' \
+        -e '/^command = /d' \
+        "${CRAFT_PART_INSTALL}/pyvenv.cfg"
