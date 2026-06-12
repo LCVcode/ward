@@ -7,7 +7,7 @@ from pathlib import Path
 
 from ward import workshop
 from ward.errors import die, info
-from ward.preflight import run_preflight
+from ward.preflight import Tier, run_preflight
 
 EXIT_SUSPEND_FAILED = 75
 
@@ -17,7 +17,7 @@ STOP_TIMEOUT_SECONDS = 60.0
 
 
 def run() -> None:
-    run_preflight()
+    run_preflight(tier=Tier.MINIMAL)
     cwd = Path.cwd()
 
     state, _ = workshop.query_state(cwd)

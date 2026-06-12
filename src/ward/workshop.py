@@ -19,8 +19,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Sequence
 
-# The container name is hardcoded by SPEC.md — ward owns exactly one workshop
-# named "ward" per project directory.
+# Hardcoded by ward — exactly one workshop per project, always named "ward".
 WORKSHOP_NAME = "ward"
 
 

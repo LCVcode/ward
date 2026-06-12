@@ -15,8 +15,8 @@ import yaml
 MANIFEST_FILENAME = "workshop.yaml"
 EXPECTED_NAME = "ward"
 
-# The canonical, verified blueprint from SPEC.md section 3.
-# Written verbatim so the on-disk file matches the spec character-for-character.
+# The canonical workshop manifest written by 'ward init'.
+# Written verbatim so the on-disk file is reproducible across hosts.
 #
 # Notes on shape:
 # - The workshop definition schema only accepts: name, base, sdks, connections,

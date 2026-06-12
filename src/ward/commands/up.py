@@ -1,23 +1,29 @@
 """``ward up`` — bring the sandboxed OpenCode session online.
 
-Per SPEC.md section 5:
+Lifecycle (matches README "How it works"):
 1. Ensure workshop.yaml exists in the project (auto-generate if missing).
 2. Query the container's state via the workshop CLI.
 3. Reconcile state: ``Off`` → launch; ``Stopped`` → start; ``Ready`` → pass.
 4. Run the hydration loop: stop → remount config + data → start.
-5. Hand off control with ``workshop run ward opencode`` (replaces process).
+5. Connect the ssh-agent plug (manual-connect interface).
+6. Inject (sanitized) host gitconfig into the workshop.
+7. Hand off control with ``workshop run ward opencode`` (replaces process).
 """
 
 from __future__ import annotations
 
 import os
-import pwd
 import re
 from pathlib import Path
 
 from ward import manifest, workshop
 from ward.errors import die, info, warn
-from ward.preflight import OPENCODE_CONFIG_DIR, run_preflight
+from ward.preflight import (
+    OPENCODE_CONFIG_DIR,
+    Tier,
+    resolve_host_home,
+    run_preflight,
+)
 
 EXIT_STATUS_QUERY_FAILED = 71
 EXIT_REMOUNT_FAILED = 74
@@ -259,22 +265,8 @@ def _handoff() -> None:
 
 
 def _resolve_host_home() -> Path:
-    """Return the operator's real home directory.
-
-    When ward is installed as a classic snap, ``$HOME`` may be the snap's
-    per-user data directory (``~/snap/ward/current/``) rather than the
-    operator's actual home. snapd exposes the real path via
-    ``$SNAP_REAL_HOME``; falling back to the passwd entry for the current
-    UID handles non-snap installs and unusual launch contexts (sudo, cron).
-    ``Path.home()`` is the final fallback.
-    """
-    real = os.environ.get("SNAP_REAL_HOME")
-    if real:
-        return Path(real)
-    try:
-        return Path(pwd.getpwuid(os.getuid()).pw_dir)
-    except KeyError:
-        return Path.home()
+    """Compatibility shim — defers to :func:`ward.preflight.resolve_host_home`."""
+    return resolve_host_home()
 
 
 def _find_host_gitconfig() -> Path | None:
@@ -421,8 +413,8 @@ def _inject_git_config(project_dir: Path) -> None:
 
 
 def run() -> None:
-    run_preflight()
     cwd = Path.cwd()
+    run_preflight(tier=Tier.FULL, project_dir=cwd)
     _ensure_manifest(cwd)
     _ensure_launched_and_stopped(cwd)
     _hydrate(cwd)

@@ -10,7 +10,7 @@ from pathlib import Path
 
 from ward import workshop
 from ward.errors import die, info
-from ward.preflight import run_preflight
+from ward.preflight import Tier, run_preflight
 
 EXIT_REMOVAL_FAILED = 76
 
@@ -25,7 +25,7 @@ _LOCK_MARKERS = (
 
 
 def run() -> None:
-    run_preflight()
+    run_preflight(tier=Tier.MINIMAL)
     cwd = Path.cwd()
 
     state, _ = workshop.query_state(cwd)

@@ -12,7 +12,7 @@ import sys
 from typing import Callable, Sequence
 
 from ward import __version__
-from ward.commands import clear as cmd_clear
+from ward.commands import clean as cmd_clean
 from ward.commands import init as cmd_init
 from ward.commands import purge as cmd_purge
 from ward.commands import sleep as cmd_sleep
@@ -54,7 +54,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Destroy the ward container (host project files are preserved).",
     )
     sub.add_parser(
-        "clear",
+        "clean",
         help="Remove ward files (workshop.yaml, AGENTS.md) from the project.",
     )
     return parser
@@ -65,7 +65,7 @@ _DISPATCH: dict[str, Callable[[], None]] = {
     "up": cmd_up.run,
     "sleep": cmd_sleep.run,
     "purge": cmd_purge.run,
-    "clear": cmd_clear.run,
+    "clean": cmd_clean.run,
 }
 
 

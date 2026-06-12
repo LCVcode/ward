@@ -1,11 +1,11 @@
-"""``ward clear`` — remove ward's files from the project directory.
+"""``ward clean`` — remove ward's files from the project directory.
 
 The inverse of ``ward init``. Deletes the ward-managed artifacts
 (``workshop.yaml``, the ``.workshop.lock`` state file, and the
 ``AGENTS.md`` placeholder) so a repository can be fully de-warded.
 
 Defensive behaviour:
-- Refuses to clear while a container still exists for this project,
+- Refuses to clean while a container still exists for this project,
   to avoid orphaning a live VM whose manifest you just deleted. The
   user is directed to run ``ward purge`` first.
 - Operates purely on the host filesystem; it does not require the
@@ -22,6 +22,7 @@ from pathlib import Path
 from ward import manifest, workshop
 from ward.commands.init import AGENTS_FILENAME, GITIGNORE_BLOCK_BEGIN, GITIGNORE_BLOCK_END
 from ward.errors import die, info
+from ward.preflight import Tier, run_preflight
 
 EXIT_CONTAINER_EXISTS = 80
 
@@ -62,6 +63,7 @@ def _orphan_guard(project_dir: Path) -> None:
 
 
 def run() -> None:
+    run_preflight(tier=Tier.MINIMAL)
     cwd = Path.cwd()
 
     _orphan_guard(cwd)
@@ -82,7 +84,7 @@ def run() -> None:
 
     _clean_gitignore(cwd)
 
-    info("[INFO] Ward files cleared. Run 'ward init' to re-provision this "
+    info("[INFO] ward files cleaned. Run 'ward init' to re-provision this "
          "project.")
 
 
