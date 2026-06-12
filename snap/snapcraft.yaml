@@ -1,5 +1,5 @@
 name: ward
-version: "0.1.1"
+version: "0.1.2"
 summary: Infrastructure coordinator for Canonical Workshop VMs and OpenCode agents
 description: |
   ward manages the lifecycle of Canonical Workshop VMs (LXD containers) and
