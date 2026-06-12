@@ -11,6 +11,8 @@ Per SPEC.md section 5:
 from __future__ import annotations
 
 import os
+import pwd
+import re
 from pathlib import Path
 
 from ward import manifest, workshop
@@ -26,12 +28,59 @@ OPENCODE_DATA_DIR = Path("~/.local/share/opencode").expanduser()
 CONFIG_PLUG = "opencode:opencode-config"
 DATA_PLUG = "opencode:opencode-data"
 
+# SSH agent forwarding: the ssh-agent interface is manual-connect and the plug
+# is declared on the opencode SDK (per manifest.MANIFEST_CONTENT), since SSH
+# plugs cannot live on the system SDK. ``ward up`` runs `workshop connect`
+# after start to wire it.
+SSH_AGENT_PLUG = "opencode:ssh-agent"
+
+# Markers in `workshop connect` stderr indicating the workshop's on-disk
+# definition is older than what ward expects (plug doesn't exist yet). The
+# remedy is a refresh-and-retry. Substring match, case-insensitive.
+_STALE_DEFINITION_MARKERS = (
+    "has no plug named",
+    "no such plug",
+    "unknown plug",
+)
+
+# Substrings indicating the plug is already connected — treated as success.
+_ALREADY_CONNECTED_MARKERS = (
+    "already connected",
+)
+
+# Substring indicating the host has no SSH agent running (or SSH_AUTH_SOCK
+# isn't exported into ward's process). Worth surfacing distinctly because
+# the fix is on the host side, not inside the workshop.
+_NO_HOST_AGENT_MARKER = "ssh_auth_sock"
+
 # Host git configuration is copied into the sandbox so the agent commits with
 # the operator's identity (user.name/user.email) and inherits their git
 # settings (url rewrites, default branch, editor, ...). Auth itself flows
 # through the forwarded ssh-agent, not this file.
-GITCONFIG_HOST = Path("~/.gitconfig").expanduser()
+#
+# The injected file is always written to ``/home/workshop/.gitconfig`` because
+# git inside the workshop reads ``$HOME/.gitconfig`` for the default
+# ``workshop`` user (which is also the user ``workshop exec`` runs as).
 GITCONFIG_TARGET = "/home/workshop/.gitconfig"
+
+# Sections to drop wholesale from the host gitconfig before injection.
+# These either reference host-only resources (gpg agents, includeIf paths)
+# or are meaningless / harmful inside the sandbox.
+_DROP_SECTIONS = {"includeif", "include", "gpg"}
+
+# Per-section keys to drop. Section names are lowered; key names are matched
+# case-insensitively.
+_DROP_KEYS: dict[str, set[str]] = {
+    "commit": {"gpgsign"},
+    "tag": {"gpgsign"},
+    "push": {"gpgsign"},
+    "user": {"signingkey"},
+    "credential": {"helper"},
+    "core": {"sshcommand"},
+}
+
+_SECTION_RE = re.compile(r'^\s*\[([A-Za-z0-9.-]+)(?:\s+"([^"]*)")?\]\s*$')
+_KEY_RE = re.compile(r'^\s*([A-Za-z][A-Za-z0-9-]*)\s*=')
 
 
 def _ensure_manifest(project_dir: Path) -> None:
@@ -125,6 +174,79 @@ def _start(project_dir: Path) -> None:
         )
 
 
+def _connect_ssh_agent(project_dir: Path) -> None:
+    """Wire the host's SSH agent into the sandbox.
+
+    The ssh-agent interface is manual-connect by design (security boundary
+    on host credentials). Without this step ``git clone git@...`` fails
+    inside the workshop with "Permission denied (publickey)" even though
+    ssh-agent forwarding is declared in the manifest.
+
+    Idempotent: an "already connected" response is treated as success. If
+    the workshop was launched against an older manifest that didn't declare
+    the plug, attempt a one-shot ``workshop refresh`` to apply the new
+    definition, then retry the connect. All failures are warnings, not
+    fatal — git operations will still fail loudly inside the sandbox if
+    this didn't take, but the agent itself can still run.
+    """
+    result = workshop.connect(SSH_AGENT_PLUG, project_dir)
+
+    if result.ok or _stderr_matches(result, _ALREADY_CONNECTED_MARKERS):
+        info("[INFO] Connected host SSH agent to the ward sandbox "
+             f"({SSH_AGENT_PLUG}).")
+        return
+
+    if _stderr_matches(result, (_NO_HOST_AGENT_MARKER,)):
+        warn(
+            "[WARN] Cannot wire ssh-agent: no SSH agent appears to be "
+            "running on the host (SSH_AUTH_SOCK is not set in ward's "
+            "environment). Start one with 'eval \"$(ssh-agent -s)\" && "
+            "ssh-add' on the host, then re-run 'ward up'. Git over SSH "
+            "inside the sandbox will otherwise fail with 'Permission "
+            "denied (publickey)'."
+        )
+        return
+
+    if _stderr_matches(result, _STALE_DEFINITION_MARKERS):
+        info("[INFO] Workshop definition appears stale (no ssh-agent plug "
+             "on opencode SDK). Refreshing to apply the current manifest...")
+        refresh_result = workshop.refresh(project_dir)
+        if not refresh_result.ok:
+            warn(
+                "[WARN] Refresh failed; cannot wire ssh-agent. Run "
+                "'workshop refresh ward' manually, then re-run 'ward up'."
+                + (f"\n{refresh_result.stderr.strip()}"
+                   if refresh_result.stderr.strip() else "")
+            )
+            return
+        retry = workshop.connect(SSH_AGENT_PLUG, project_dir)
+        if retry.ok or _stderr_matches(retry, _ALREADY_CONNECTED_MARKERS):
+            info("[INFO] Connected host SSH agent to the ward sandbox "
+                 f"({SSH_AGENT_PLUG}) after refresh.")
+            return
+        warn(
+            "[WARN] Failed to connect ssh-agent after refresh; git over SSH "
+            "inside the sandbox will fail with 'Permission denied "
+            "(publickey)'. Run 'workshop connect ward/"
+            f"{SSH_AGENT_PLUG}' manually to diagnose."
+            + (f"\n{retry.stderr.strip()}" if retry.stderr.strip() else "")
+        )
+        return
+
+    warn(
+        "[WARN] Failed to connect ssh-agent; git over SSH inside the "
+        "sandbox will fail with 'Permission denied (publickey)'. Run "
+        f"'workshop connect ward/{SSH_AGENT_PLUG}' manually to diagnose."
+        + (f"\n{result.stderr.strip()}" if result.stderr.strip() else "")
+    )
+
+
+def _stderr_matches(result: workshop.CommandResult, markers: tuple[str, ...]) -> bool:
+    """Case-insensitive substring search across the result's combined output."""
+    haystack = result.combined.lower()
+    return any(marker in haystack for marker in markers)
+
+
 def _handoff() -> None:
     """Replace the current process with ``workshop run ward opencode``.
 
@@ -136,34 +258,165 @@ def _handoff() -> None:
     os.execvp(argv[0], argv)  # pragma: no cover — replaces process
 
 
+def _resolve_host_home() -> Path:
+    """Return the operator's real home directory.
+
+    When ward is installed as a classic snap, ``$HOME`` may be the snap's
+    per-user data directory (``~/snap/ward/current/``) rather than the
+    operator's actual home. snapd exposes the real path via
+    ``$SNAP_REAL_HOME``; falling back to the passwd entry for the current
+    UID handles non-snap installs and unusual launch contexts (sudo, cron).
+    ``Path.home()`` is the final fallback.
+    """
+    real = os.environ.get("SNAP_REAL_HOME")
+    if real:
+        return Path(real)
+    try:
+        return Path(pwd.getpwuid(os.getuid()).pw_dir)
+    except KeyError:
+        return Path.home()
+
+
+def _find_host_gitconfig() -> Path | None:
+    """Locate the operator's git config, preferring ``~/.gitconfig``.
+
+    Falls back to the XDG location ``~/.config/git/config`` which many
+    modern setups (and ``git config --global``'s own write target when
+    XDG_CONFIG_HOME is set) use instead.
+    """
+    home = _resolve_host_home()
+    for candidate in (home / ".gitconfig", home / ".config" / "git" / "config"):
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def _sanitize_gitconfig(text: str) -> tuple[str, list[str]]:
+    """Strip host-only directives from a gitconfig text.
+
+    Returns ``(sanitized_text, stripped_descriptions)``. Drops entire
+    ``[includeIf]`` / ``[include]`` / ``[gpg]`` sections (they reference
+    host-only paths or programs), and per-section keys that depend on the
+    host's keychain, GPG agent, or SSH wrapper (signing keys, credential
+    helpers, custom ssh commands).
+
+    The parser is line-based and intentionally simple: git's config grammar
+    permits multi-line values via backslash continuation, but those are
+    vanishingly rare in user configs and surviving them here would just
+    yield slightly noisier output, not incorrect identity propagation.
+    """
+    out: list[str] = []
+    stripped: list[str] = []
+    current: str | None = None
+    skip_section = False
+
+    for line in text.splitlines(keepends=True):
+        section_match = _SECTION_RE.match(line)
+        if section_match:
+            current = section_match.group(1).lower()
+            skip_section = current in _DROP_SECTIONS
+            if skip_section:
+                stripped.append(f"[{section_match.group(1)}]")
+                continue
+            out.append(line)
+            continue
+        if skip_section:
+            continue
+        key_match = _KEY_RE.match(line)
+        if (
+            key_match
+            and current is not None
+            and current in _DROP_KEYS
+            and key_match.group(1).lower() in _DROP_KEYS[current]
+        ):
+            stripped.append(f"{current}.{key_match.group(1).lower()}")
+            continue
+        out.append(line)
+
+    return "".join(out), stripped
+
+
+def _verify_git_identity(project_dir: Path) -> tuple[str, str]:
+    """Read user.name and user.email back from the workshop's git config.
+
+    Returns ``(name, email)`` with empty strings for any field that git
+    reports as unset (exit code 1 from ``git config --get``). Any other
+    failure mode (git missing, exec rejection) returns empty strings as
+    well — the caller treats absence as "verification inconclusive" and
+    surfaces a warning rather than aborting the session.
+    """
+    def _get(key: str) -> str:
+        result = workshop.exec_capture(
+            ["git", "config", "--global", "--get", key], project_dir
+        )
+        if result.ok:
+            return result.stdout.strip()
+        return ""
+
+    return _get("user.name"), _get("user.email")
+
+
 def _inject_git_config(project_dir: Path) -> None:
-    """Copy the host's ~/.gitconfig into the running sandbox.
+    """Copy the host's git config into the running sandbox.
 
     Without this the sandboxed agent has no git identity and cannot create
     commits. Auth is handled separately via the forwarded ssh-agent.
 
-    Best-effort: a missing host config is skipped silently, and an injection
-    failure warns but does not abort the session (the agent can still run;
-    only the git identity/config would be absent).
+    Best-effort: a missing host config is logged (so the operator sees the
+    skip), and an injection failure warns but does not abort the session
+    (the agent can still run; only the git identity/config would be
+    absent).
     """
-    if not GITCONFIG_HOST.is_file():
+    source = _find_host_gitconfig()
+    if source is None:
+        home = _resolve_host_home()
+        info(
+            f"[INFO] No host git config found at {home}/.gitconfig or "
+            f"{home}/.config/git/config. Skipping git config injection; "
+            "commits inside the sandbox will need user.name/user.email set."
+        )
         return
+
     try:
-        content = GITCONFIG_HOST.read_text(encoding="utf-8")
+        raw = source.read_text(encoding="utf-8")
     except OSError as exc:
-        warn(f"[WARN] Could not read {GITCONFIG_HOST}: {exc}. "
+        warn(f"[WARN] Could not read {source}: {exc}. "
              "Skipping git config injection.")
         return
 
+    content, stripped = _sanitize_gitconfig(raw)
+
     result = workshop.write_file(GITCONFIG_TARGET, content, project_dir)
-    if result.ok:
-        info("[INFO] Injected host git configuration into the ward sandbox.")
-    else:
+    if not result.ok:
         warn(
             "[WARN] Failed to inject git configuration into the sandbox; "
-            "commits inside it may need 'git config user.name/user.email' set "
-            "manually."
+            "commits inside it may need 'git config user.name/user.email' "
+            "set manually."
             + (f"\n{result.stderr.strip()}" if result.stderr.strip() else "")
+        )
+        return
+
+    info(f"[INFO] Injected host git configuration from {source} into the "
+         "ward sandbox.")
+    if stripped:
+        info("[INFO] Stripped host-only directives during injection: "
+             + ", ".join(stripped))
+
+    name, email = _verify_git_identity(project_dir)
+    if name and email:
+        info(f"[INFO] Verified sandbox git identity: {name} <{email}>.")
+    else:
+        missing = []
+        if not name:
+            missing.append("user.name")
+        if not email:
+            missing.append("user.email")
+        warn(
+            "[WARN] Git config injected but identity verification could not "
+            f"read {', '.join(missing)} inside the sandbox. The host config "
+            "may rely on '[includeIf]'/'[include]' files (which are not "
+            "transported) or set identity outside the user.* section. Set "
+            "the missing fields manually inside the sandbox if commits fail."
         )
 
 
@@ -174,6 +427,7 @@ def run() -> None:
     _ensure_launched_and_stopped(cwd)
     _hydrate(cwd)
     _start(cwd)
+    _connect_ssh_agent(cwd)
     _inject_git_config(cwd)
     info("[INFO] Handing off to OpenCode inside the ward sandbox...")
     _handoff()

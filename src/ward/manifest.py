@@ -17,6 +17,17 @@ EXPECTED_NAME = "ward"
 
 # The canonical, verified blueprint from SPEC.md section 3.
 # Written verbatim so the on-disk file matches the spec character-for-character.
+#
+# Notes on shape:
+# - The workshop definition schema only accepts: name, base, sdks, connections,
+#   actions. There is no top-level `interfaces:` key; any such block is silently
+#   ignored. Network access is always available; the SSH agent must be wired
+#   through an explicit plug on a regular SDK (the system SDK cannot host
+#   ssh-agent plugs per the SSH interface reference).
+# - The `ssh-agent` plug is declared inline on the `opencode` SDK so the agent
+#   can use the operator's forwarded SSH identities for git remotes. The
+#   ssh-agent interface is manual-connect, so `ward up` runs `workshop connect`
+#   after starting the workshop.
 MANIFEST_CONTENT = """\
 name: ward
 base: ubuntu@24.04
@@ -25,13 +36,12 @@ sdks:
     channel: latest/stable
   - name: opencode
     channel: latest/stable
+    plugs:
+      ssh-agent:
+        interface: ssh-agent
 
 actions:
   opencode: opencode "$@"
-
-interfaces:
-  - type: network
-  - type: ssh-agent
 """
 
 

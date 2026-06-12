@@ -161,6 +161,43 @@ def remount(
     )
 
 
+def connect(
+    plug: str,
+    project_dir: Path,
+    timeout: float | None = None,
+) -> CommandResult:
+    """Connect a plug to its default slot.
+
+    ``plug`` is the qualified plug name without the workshop prefix, e.g.
+    ``opencode:ssh-agent``. Workshop resolves the slot by interface when no
+    explicit slot is supplied.
+    """
+    target = f"{WORKSHOP_NAME}/{plug}"
+    return _run(["connect", target, "-p", str(project_dir)], timeout=timeout)
+
+
+def connections(
+    project_dir: Path,
+    timeout: float | None = None,
+) -> CommandResult:
+    """List interface connections for ward's workshop in ``project_dir``."""
+    return _run(
+        ["connections", WORKSHOP_NAME, "-p", str(project_dir)],
+        timeout=timeout,
+    )
+
+
+def refresh(
+    project_dir: Path,
+    timeout: float | None = None,
+) -> CommandResult:
+    """Refresh ward's workshop in ``project_dir`` against its current definition."""
+    return _run(
+        ["refresh", WORKSHOP_NAME, "-p", str(project_dir)],
+        timeout=timeout,
+    )
+
+
 # ---------- in-workshop file writes ----------
 
 def write_file(
@@ -171,20 +208,54 @@ def write_file(
 ) -> CommandResult:
     """Write ``content`` to ``target_path`` inside the workshop.
 
-    Runs ``workshop exec -I ward -- tee <target_path>`` non-interactively,
-    feeding ``content`` on stdin. The workshop must be ``Ready`` (or
-    ``Waiting``) for ``exec`` to be accepted.
+    Runs ``workshop exec -I -p <project_dir> ward -- tee <target_path>``
+    non-interactively, feeding ``content`` on stdin. The workshop must be
+    ``Ready`` (or ``Waiting``) for ``exec`` to be accepted.
 
     ``tee`` echoes stdin to stdout as well; that captured output is ignored
     by callers, which only inspect the returned :class:`CommandResult`.
+
+    Flag ordering follows the documented form ``workshop exec [flags]
+    <WORKSHOP> -- <cmd>``: all flags precede the positional workshop name.
     """
     proc = subprocess.run(
         [
-            "workshop", "exec", "-I", WORKSHOP_NAME,
+            "workshop", "exec", "-I",
             "-p", str(project_dir),
+            WORKSHOP_NAME,
             "--", "tee", target_path,
         ],
         input=content,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+        check=False,
+    )
+    return CommandResult(
+        returncode=proc.returncode,
+        stdout=proc.stdout or "",
+        stderr=proc.stderr or "",
+    )
+
+
+def exec_capture(
+    argv: Sequence[str],
+    project_dir: Path,
+    timeout: float | None = None,
+) -> CommandResult:
+    """Run an ad-hoc command inside the workshop, capturing stdout/stderr.
+
+    Runs ``workshop exec -I -p <project_dir> ward -- <argv...>``. Intended
+    for short, non-interactive probes (e.g. verifying that a written file
+    is readable). The workshop must be ``Ready`` or ``Waiting``.
+    """
+    proc = subprocess.run(
+        [
+            "workshop", "exec", "-I",
+            "-p", str(project_dir),
+            WORKSHOP_NAME,
+            "--", *argv,
+        ],
         capture_output=True,
         text=True,
         timeout=timeout,
