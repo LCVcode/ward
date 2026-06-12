@@ -106,7 +106,7 @@ Without R10 commits inside the workshop will be anonymous.
 |---|---|---|
 | `ward init` | full | R1–R10 |
 | `ward up` | full | R1–R10 |
-| `ward sleep` | minimal | R1, R4 |
+| `ward down` | minimal | R1, R4 |
 | `ward clean` | minimal | R1, R4 |
 | `ward purge` | minimal | R1, R4 |
 
@@ -116,35 +116,42 @@ the host's SSH/git setup is broken.
 ## Installation
 
 ward is distributed as a classic snap built from this repo. There is no
-public release yet — build locally:
+public release yet — build and install it yourself:
 
 ```bash
-git clone https://github.com/anomalyco/ward.git
+git clone https://github.com/LCVcode/ward.git
 cd ward
-./scripts/snap-install.sh        # builds with snapcraft (--use-lxd) and installs
-```
-
-The install/uninstall scripts under `scripts/` are intentionally
-untracked so each contributor can keep their own variants. The
-equivalent manual recipe:
-
-```bash
 snapcraft pack --use-lxd
 sudo snap install --classic --dangerous ./ward_*.snap
 ```
 
-For a dev loop without rebuilding the snap each time:
+Prerequisites for the build itself:
+
+```bash
+sudo snap install snapcraft --classic
+sudo snap install lxd        # snapcraft uses LXD as the build backend
+```
+
+After installation, `which ward` should resolve to `/snap/bin/ward`.
+
+### Dev loop without rebuilding
+
+For a tight iteration cycle (no snap rebuild between edits), invoke
+ward straight from the source tree:
 
 ```bash
 uv run src/ward/cli.py <subcommand>
 ```
+
+This uses your local Python environment instead of the snap-bundled
+interpreter, so changes under `src/ward/` take effect immediately.
 
 ## Quickstart
 
 ```bash
 ward init     # provisions workshop.yaml + AGENTS.md in this Git repo
 ward up       # launches the workshop and hands off to OpenCode inside it
-ward sleep    # when you're done, frees host CPU/memory
+ward down     # when you're done, frees host CPU/memory
 ```
 
 If any of R1–R8 isn't satisfied, `ward init` prints exactly what's
@@ -189,11 +196,11 @@ The main entry point. Idempotent.
 Exits 70 (launch failed), 71 (status query failed), 74 (remount
 failed), plus any preflight code.
 
-### `ward sleep`
+### `ward down`
 
 Stops the workshop container, releasing host CPU and memory. Container
 state is preserved on disk; `ward up` resumes from where you left off.
-No-ops if the workshop is already stopped. Exit 75 on failure.
+No-ops if the workshop is already down. Exit 75 on failure.
 
 ### `ward clean`
 
@@ -302,7 +309,7 @@ Single source of truth — every non-zero exit ward emits.
 | 71 | Workshop status query failed (lxd daemon / permissions) |
 | 73 | Existing `workshop.yaml` has wrong `name:` |
 | 74 | Mount remount failed |
-| 75 | Workshop suspend (`sleep`) failed |
+| 75 | Workshop shutdown (`down`) failed |
 | 76 | Workshop removal (`purge`) failed |
 | 77 | User not in `lxd` group, or lxd not installed |
 | 78 | `SSH_AUTH_SOCK` unset or invalid in shell |
@@ -322,11 +329,10 @@ src/ward/
   commands/
     init.py
     up.py
-    sleep.py
+    down.py
     clean.py
     purge.py
 snap/snapcraft.yaml   # classic snap definition (core24)
-scripts/              # local dev scripts (untracked)
 ```
 
 Per-project, written by `ward init`:
@@ -337,22 +343,3 @@ Per-project, written by `ward init`:
 - `.workshop.lock` — workshop CLI local state pin (gitignored).
 - `.gitignore` — gets a `# ward-managed-begin`/`# ward-managed-end`
   block appended; `ward clean` removes the block in place.
-
-## Contributing / dev scripts
-
-`scripts/snap-install.sh` and `scripts/snap-uninstall.sh` are
-intentionally untracked (see `.gitignore`). They wrap the standard
-`snapcraft pack --use-lxd` + `sudo snap install --classic --dangerous`
-flow with stale-artifact cleanup, full `snapcraft clean` between
-builds, and `snap remove --purge` to also wipe per-user state. Equivalents
-are documented under [Installation](#installation).
-
-Typical iteration loop:
-
-```bash
-# Edit src/ward/...
-uv run src/ward/cli.py <subcommand>     # fast: no snap rebuild
-# When confident:
-./scripts/snap-install.sh               # rebuild + install
-ward <subcommand>                       # verify the snap path
-```

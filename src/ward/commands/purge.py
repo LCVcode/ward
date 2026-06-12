@@ -34,7 +34,7 @@ def run() -> None:
         return
 
     # `workshop remove` rejects Off/Pending; for Ready/Waiting we stop first
-    # so removal proceeds cleanly without forcing the user to run `ward sleep`.
+    # so removal proceeds cleanly without forcing the user to run `ward down`.
     if state in (workshop.State.READY, workshop.State.WAITING):
         workshop.stop(cwd)
 
@@ -43,7 +43,7 @@ def run() -> None:
         message = (
             "[ERROR] Infrastructure removal failed. An active process inside "
             "the VM may be locking files. Terminate active sessions first via "
-            "'ward sleep'."
+            "'ward down'."
         )
         if result.stderr.strip():
             message += f"\n{result.stderr.strip()}"

@@ -13,9 +13,9 @@ from typing import Callable, Sequence
 
 from ward import __version__
 from ward.commands import clean as cmd_clean
+from ward.commands import down as cmd_down
 from ward.commands import init as cmd_init
 from ward.commands import purge as cmd_purge
-from ward.commands import sleep as cmd_sleep
 from ward.commands import up as cmd_up
 
 
@@ -46,8 +46,8 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Launch (or resume) the sandboxed OpenCode session.",
     )
     sub.add_parser(
-        "sleep",
-        help="Suspend the ward container, freeing host CPU and memory.",
+        "down",
+        help="Shut down the ward container, freeing host CPU and memory.",
     )
     sub.add_parser(
         "purge",
@@ -63,7 +63,7 @@ def _build_parser() -> argparse.ArgumentParser:
 _DISPATCH: dict[str, Callable[[], None]] = {
     "init": cmd_init.run,
     "up": cmd_up.run,
-    "sleep": cmd_sleep.run,
+    "down": cmd_down.run,
     "purge": cmd_purge.run,
     "clean": cmd_clean.run,
 }
