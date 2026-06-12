@@ -7,7 +7,7 @@ name = "ward"
 version = "0.1.1"
 description = "Infrastructure coordinator for Canonical Workshop VMs and OpenCode agents"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.12"
 dependencies = [
     "pyyaml>=6.0",
 ]

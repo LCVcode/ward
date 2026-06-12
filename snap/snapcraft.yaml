@@ -1,5 +1,5 @@
 name: ward
-version: "0.0.0"
+version: "0.1.1"
 summary: Infrastructure coordinator for Canonical Workshop VMs and OpenCode agents
 description: |
   ward manages the lifecycle of Canonical Workshop VMs (LXD containers) and
@@ -21,22 +21,39 @@ apps:
     command: bin/ward
     environment:
       PYTHONHOME: $SNAP/usr
-      PYTHONPATH: $SNAP/usr/lib/python3/dist-packages:$SNAP/usr/lib/python3.13
+      PYTHONPATH: $SNAP/usr/lib/python3/dist-packages:$SNAP/usr/lib/python3.12
 
 parts:
   ward:
     plugin: python
     source: .
     # The python plugin will call pip under the hood. We override the build
-    # to explicitly use Python 3.13 (staged from Ubuntu 24.04 universe) so
-    # that the requires-python = ">=3.13" constraint in pyproject.toml is met.
-    # core24's default python3 is 3.12.
+    # to explicitly use Python 3.12, which is the interpreter shipped by
+    # core24 (Ubuntu 24.04). ward's requires-python = ">=3.12" is satisfied
+    # by this stock interpreter, so no out-of-archive Python is needed.
     python-packages:
       - pip
+    # core24's build chroot ships only python3.12-minimal, which lacks the
+    # stdlib C-extensions (_decimal, _contextvars, ...) provided by
+    # libpython3.12-stdlib. The override-build below invokes python3.12
+    # directly, so we must pull a complete interpreter into the BUILD
+    # environment via build-packages (stage-packages only populate the
+    # snap's runtime payload, not the build chroot).
+    build-packages:
+      - python3.12
     stage-packages:
-      - python3.13
-      - python3.13-minimal
+      - python3.12
+      - python3.12-minimal
       - python3-pip
     override-build: |
-      python3.13 -m pip install --prefix="$SNAPCRAFT_PART_INSTALL" .
+      # The python plugin prepends the part's staged tree to PATH, so a bare
+      # "python3.12" resolves to the staged interpreter under
+      # $CRAFT_PART_INSTALL — which lacks the stdlib C-extension dynload
+      # (_decimal, _contextvars, ...) because libpython3.12-stdlib is a
+      # filtered base package and is not re-staged. We therefore invoke the
+      # build environment's complete interpreter by absolute path
+      # (/usr/bin/python3.12, pulled in via build-packages) to run pip, and
+      # clear PYTHON* so craft's venv-oriented env can't redirect it. craftctl
+      # default still runs with the original craft-managed environment.
+      env -u PYTHONHOME -u PYTHONPATH /usr/bin/python3.12 -m pip install --prefix="$SNAPCRAFT_PART_INSTALL" .
       craftctl default
