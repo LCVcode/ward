@@ -13,11 +13,4 @@ wheels/
 snap/.snapcraft/
 *.snap
 
-# Local dev scripts (untracked by design)
-scripts/snap-install.sh
-scripts/snap-uninstall.sh
 
-# ward-managed-begin
-workshop.yaml
-.workshop.lock
-# ward-managed-end
