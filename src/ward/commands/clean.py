@@ -1,8 +1,12 @@
 """``ward clean`` — remove ward's files from the project directory.
 
 The inverse of ``ward init``. Deletes the ward-managed artifacts
-(``workshop.yaml``, the ``.workshop.lock`` state file, and the
-``AGENTS.md`` placeholder) so a repository can be fully de-warded.
+(``workshop.yaml`` and the ``.workshop.lock`` state file) so a
+repository can be fully de-warded.
+
+``AGENTS.md`` is intentionally left untouched: users may have
+customised it with project-specific context that is independent of
+ward and should not be silently destroyed.
 
 Defensive behaviour:
 - Refuses to clean while a container still exists for this project,
@@ -20,19 +24,16 @@ import shutil
 from pathlib import Path
 
 from ward import manifest, workshop
-from ward.commands.init import AGENTS_FILENAME, GITIGNORE_BLOCK_BEGIN, GITIGNORE_BLOCK_END
+from ward.commands.init import GITIGNORE_BLOCK_BEGIN, GITIGNORE_BLOCK_END
 from ward.errors import die, info
 from ward.preflight import Tier, run_preflight
 
 EXIT_CONTAINER_EXISTS = 80
 
-# Ward-managed files, in removal-report order. AGENTS.md is removed last
-# because it is the file most likely to carry user-authored content; its
-# history remains recoverable from version control.
+# Ward-managed files, in removal-report order.
 _WARD_FILES = (
     manifest.MANIFEST_FILENAME,  # workshop.yaml
     ".workshop.lock",            # workshop CLI local state pin
-    AGENTS_FILENAME,             # AGENTS.md
 )
 
 
