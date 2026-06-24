@@ -106,6 +106,7 @@ Without R10 commits inside the workshop will be anonymous.
 |---|---|---|
 | `ward init` | full | R1–R10 |
 | `ward up` | full | R1–R10 |
+| `ward status` | minimal | R1, R4 |
 | `ward down` | minimal | R1, R4 |
 | `ward clean` | minimal | R1, R4 |
 | `ward purge` | minimal | R1, R4 |
@@ -196,6 +197,15 @@ The main entry point. Idempotent.
 Exits 70 (launch failed), 71 (status query failed), 74 (remount
 failed), plus any preflight code.
 
+### `ward status`
+
+Read-only. Reports the workshop's lifecycle state (`Off`, `Stopped`,
+`Ready`, …) without launching or modifying anything. When the workshop
+is running, it also reports whether the `ssh-agent` plug is connected.
+Prints a hint to run `ward init` if no workshop is provisioned, or
+`ward up` if it exists but isn't running. Exit 71 if the status query
+itself fails (lxd daemon / permissions).
+
 ### `ward down`
 
 Stops the workshop container, releasing host CPU and memory. Container
@@ -204,10 +214,11 @@ No-ops if the workshop is already down. Exit 75 on failure.
 
 ### `ward clean`
 
-Removes ward's per-project artifacts (`workshop.yaml`,
-`.workshop.lock`, `AGENTS.md`) and the ward-managed `.gitignore` block.
-Refuses if a container still exists for the project — run `ward purge`
-first. Exit 80 if a container exists.
+Removes ward's per-project artifacts (`workshop.yaml` and
+`.workshop.lock`) and the ward-managed `.gitignore` block. `AGENTS.md`
+is intentionally preserved, since it may hold project-specific context
+that is independent of ward. Refuses if a container still exists for the
+project — run `ward purge` first. Exit 80 if a container exists.
 
 ### `ward purge`
 
@@ -329,6 +340,7 @@ src/ward/
   commands/
     init.py
     up.py
+    status.py
     down.py
     clean.py
     purge.py

@@ -16,6 +16,7 @@ from ward.commands import clean as cmd_clean
 from ward.commands import down as cmd_down
 from ward.commands import init as cmd_init
 from ward.commands import purge as cmd_purge
+from ward.commands import status as cmd_status
 from ward.commands import up as cmd_up
 
 
@@ -46,6 +47,10 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Launch (or resume) the sandboxed OpenCode session.",
     )
     sub.add_parser(
+        "status",
+        help="Show the ward workshop's current state and SSH-agent wiring.",
+    )
+    sub.add_parser(
         "down",
         help="Shut down the ward container, freeing host CPU and memory.",
     )
@@ -63,6 +68,7 @@ def _build_parser() -> argparse.ArgumentParser:
 _DISPATCH: dict[str, Callable[[], None]] = {
     "init": cmd_init.run,
     "up": cmd_up.run,
+    "status": cmd_status.run,
     "down": cmd_down.run,
     "purge": cmd_purge.run,
     "clean": cmd_clean.run,

@@ -37,8 +37,8 @@ binary. Subcommands: `init`, `up`, `down`, `clean`, `purge`.
 - `manifest.py` — canonical `workshop.yaml` templating + validation.
 - `workshop.py` — defensive subprocess wrapper around the `workshop` CLI.
 - `errors.py` — centralized `die()` / `info()` / `warn()` output helpers.
-- `commands/` — one module per subcommand (`init`, `up`, `down`, `clean`,
-  `purge`).
+- `commands/` — one module per subcommand (`init`, `up`, `status`,
+  `down`, `clean`, `purge`).
 
 **Invariant:** the `workshop` CLI is only ever invoked through `workshop.py`.
 Never call it directly from command modules.
