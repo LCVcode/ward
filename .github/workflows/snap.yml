@@ -5,7 +5,7 @@ name: Snap build
 # CREDENTIALS secret here when release automation is desired.
 on:
   push:
-    branches: [main]
+    branches: [master]
     paths:
       - "snap/**"
       - "src/**"
