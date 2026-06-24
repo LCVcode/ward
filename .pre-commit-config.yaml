@@ -1,0 +1,36 @@
+# Pre-commit is the local source of truth for fast feedback; CI runs the
+# exact same hooks via `pre-commit run --all-files` (see .github/workflows/
+# ci.yml) so local and CI never drift.
+#
+# Install once with: uv run pre-commit install
+minimum_pre_commit_version: "3.7.0"
+
+repos:
+  # ---- Basic hygiene -------------------------------------------------
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-merge-conflict
+
+  # ---- Ruff: lint + format (replaces black / isort / flake8) ---------
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.19
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  # ---- ty: Astral's type checker -------------------------------------
+  # ty has no stable pre-commit mirror yet, so it runs as a local hook
+  # through uv against the project's pinned dev environment.
+  - repo: local
+    hooks:
+      - id: ty
+        name: ty (type check)
+        entry: uv run ty check
+        language: system
+        types: [python]
+        pass_filenames: false

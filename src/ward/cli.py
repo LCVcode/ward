@@ -8,8 +8,7 @@ Exposed via the ``[project.scripts]`` table in pyproject.toml so that
 from __future__ import annotations
 
 import argparse
-import sys
-from typing import Callable, Sequence
+from collections.abc import Callable, Sequence
 
 from ward import __version__
 from ward.commands import clean as cmd_clean
@@ -40,7 +39,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     sub.add_parser(
         "init",
-        help="Provision workshop.yaml and AGENTS.md in the current Git repository.",
+        help="Provision workshop.yaml and AGENTS.md in the current Git repo.",
     )
     sub.add_parser(
         "up",

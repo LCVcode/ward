@@ -69,6 +69,7 @@ the project's conventions, dependencies, and goals evolve.
 
 # ---------- precondition checks (no writes) ----------
 
+
 def _manifest_failure(project_dir: Path) -> PreflightFailure | None:
     if not manifest.exists(project_dir):
         return None
@@ -85,6 +86,7 @@ def _manifest_failure(project_dir: Path) -> PreflightFailure | None:
 
 
 # ---------- mutations (only run once all checks pass) ----------
+
 
 def _write_manifest_if_missing(project_dir: Path) -> None:
     if manifest.exists(project_dir):
@@ -127,5 +129,7 @@ def run() -> None:
     _write_manifest_if_missing(cwd)
     _write_agents_md_if_missing(cwd)
     _update_gitignore(cwd)
-    info("[INFO] ward environment initialised. Run 'ward up' to launch your "
-         "sandboxed OpenCode session.")
+    info(
+        "[INFO] ward environment initialised. Run 'ward up' to launch your "
+        "sandboxed OpenCode session."
+    )

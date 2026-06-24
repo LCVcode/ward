@@ -30,7 +30,7 @@ def run() -> None:
 
     state, _ = workshop.query_state(cwd)
     if state in (workshop.State.MISSING, workshop.State.OFF):
-        info("[INFO] No active container found to purge for this project workspace.")
+        info("[INFO] No active container found to purge for this workspace.")
         return
 
     # `workshop remove` rejects Off/Pending; for Ready/Waiting we stop first

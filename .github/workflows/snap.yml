@@ -1,0 +1,46 @@
+name: Snap build
+
+# Validates that the classic snap still builds from source. Does not publish
+# to the Snap Store — wire snapcore/action-publish + a SNAPCRAFT_STORE_
+# CREDENTIALS secret here when release automation is desired.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "snap/**"
+      - "src/**"
+      - "pyproject.toml"
+      - ".github/workflows/snap.yml"
+  pull_request:
+    paths:
+      - "snap/**"
+      - "src/**"
+      - "pyproject.toml"
+      - ".github/workflows/snap.yml"
+
+concurrency:
+  group: snap-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: snapcraft pack
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Canonical's official action; builds with LXD (equivalent to
+      # `snapcraft pack --use-lxd`) and outputs the packed .snap path.
+      - name: Build snap
+        id: build
+        uses: snapcore/action-build@v1
+
+      - name: Upload snap artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ward-snap
+          path: ${{ steps.build.outputs.snap }}
+          if-no-files-found: error

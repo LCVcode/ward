@@ -12,5 +12,3 @@ wheels/
 # Snap build artifacts
 snap/.snapcraft/
 *.snap
-
-

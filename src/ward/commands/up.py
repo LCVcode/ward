@@ -50,9 +50,7 @@ _STALE_DEFINITION_MARKERS = (
 )
 
 # Substrings indicating the plug is already connected — treated as success.
-_ALREADY_CONNECTED_MARKERS = (
-    "already connected",
-)
+_ALREADY_CONNECTED_MARKERS = ("already connected",)
 
 # Substring indicating the host has no SSH agent running (or SSH_AUTH_SOCK
 # isn't exported into ward's process). Worth surfacing distinctly because
@@ -86,7 +84,7 @@ _DROP_KEYS: dict[str, set[str]] = {
 }
 
 _SECTION_RE = re.compile(r'^\s*\[([A-Za-z0-9.-]+)(?:\s+"([^"]*)")?\]\s*$')
-_KEY_RE = re.compile(r'^\s*([A-Za-z][A-Za-z0-9-]*)\s*=')
+_KEY_RE = re.compile(r"^\s*([A-Za-z][A-Za-z0-9-]*)\s*=")
 
 
 def _ensure_manifest(project_dir: Path) -> None:
@@ -132,8 +130,11 @@ def _ensure_launched_and_stopped(project_dir: Path) -> None:
                 EXIT_LAUNCH_FAILED,
                 "[ERROR] Workshop launch timed out or failed. Verify your "
                 "internet connection and network interfaces policy."
-                + (f"\n{launch_result.stderr.strip()}"
-                   if launch_result.stderr.strip() else ""),
+                + (
+                    f"\n{launch_result.stderr.strip()}"
+                    if launch_result.stderr.strip()
+                    else ""
+                ),
             )
         # After a successful launch the workshop is started; we then stop
         # it so the hydration remounts can proceed safely.
@@ -145,8 +146,11 @@ def _ensure_launched_and_stopped(project_dir: Path) -> None:
             die(
                 EXIT_REMOUNT_FAILED,
                 "[ERROR] Could not stop ward workshop prior to remount."
-                + (f"\n{stop_result.stderr.strip()}"
-                   if stop_result.stderr.strip() else ""),
+                + (
+                    f"\n{stop_result.stderr.strip()}"
+                    if stop_result.stderr.strip()
+                    else ""
+                ),
             )
     # State.STOPPED — nothing to do.
     # State.PENDING — let workshop CLI surface its own retry guidance via the
@@ -198,15 +202,17 @@ def _connect_ssh_agent(project_dir: Path) -> None:
     result = workshop.connect(SSH_AGENT_PLUG, project_dir)
 
     if result.ok or _stderr_matches(result, _ALREADY_CONNECTED_MARKERS):
-        info("[INFO] Connected host SSH agent to the ward sandbox "
-             f"({SSH_AGENT_PLUG}).")
+        info(
+            "[INFO] Connected host SSH agent to the ward sandbox "
+            f"({SSH_AGENT_PLUG})."
+        )
         return
 
     if _stderr_matches(result, (_NO_HOST_AGENT_MARKER,)):
         warn(
             "[WARN] Cannot wire ssh-agent: no SSH agent appears to be "
             "running on the host (SSH_AUTH_SOCK is not set in ward's "
-            "environment). Start one with 'eval \"$(ssh-agent -s)\" && "
+            'environment). Start one with \'eval "$(ssh-agent -s)" && '
             "ssh-add' on the host, then re-run 'ward up'. Git over SSH "
             "inside the sandbox will otherwise fail with 'Permission "
             "denied (publickey)'."
@@ -214,21 +220,28 @@ def _connect_ssh_agent(project_dir: Path) -> None:
         return
 
     if _stderr_matches(result, _STALE_DEFINITION_MARKERS):
-        info("[INFO] Workshop definition appears stale (no ssh-agent plug "
-             "on opencode SDK). Refreshing to apply the current manifest...")
+        info(
+            "[INFO] Workshop definition appears stale (no ssh-agent plug "
+            "on opencode SDK). Refreshing to apply the current manifest..."
+        )
         refresh_result = workshop.refresh(project_dir)
         if not refresh_result.ok:
             warn(
                 "[WARN] Refresh failed; cannot wire ssh-agent. Run "
                 "'workshop refresh ward' manually, then re-run 'ward up'."
-                + (f"\n{refresh_result.stderr.strip()}"
-                   if refresh_result.stderr.strip() else "")
+                + (
+                    f"\n{refresh_result.stderr.strip()}"
+                    if refresh_result.stderr.strip()
+                    else ""
+                )
             )
             return
         retry = workshop.connect(SSH_AGENT_PLUG, project_dir)
         if retry.ok or _stderr_matches(retry, _ALREADY_CONNECTED_MARKERS):
-            info("[INFO] Connected host SSH agent to the ward sandbox "
-                 f"({SSH_AGENT_PLUG}) after refresh.")
+            info(
+                "[INFO] Connected host SSH agent to the ward sandbox "
+                f"({SSH_AGENT_PLUG}) after refresh."
+            )
             return
         warn(
             "[WARN] Failed to connect ssh-agent after refresh; git over SSH "
@@ -247,7 +260,9 @@ def _connect_ssh_agent(project_dir: Path) -> None:
     )
 
 
-def _stderr_matches(result: workshop.CommandResult, markers: tuple[str, ...]) -> bool:
+def _stderr_matches(
+    result: workshop.CommandResult, markers: tuple[str, ...]
+) -> bool:
     """Case-insensitive substring search across the result's combined output."""
     haystack = result.combined.lower()
     return any(marker in haystack for marker in markers)
@@ -265,7 +280,7 @@ def _handoff() -> None:
 
 
 def _resolve_host_home() -> Path:
-    """Compatibility shim — defers to :func:`ward.preflight.resolve_host_home`."""
+    """Compatibility shim — defers to ``preflight.resolve_host_home``."""
     return resolve_host_home()
 
 
@@ -337,6 +352,7 @@ def _verify_git_identity(project_dir: Path) -> tuple[str, str]:
     well — the caller treats absence as "verification inconclusive" and
     surfaces a warning rather than aborting the session.
     """
+
     def _get(key: str) -> str:
         result = workshop.exec_capture(
             ["git", "config", "--global", "--get", key], project_dir
@@ -372,8 +388,10 @@ def _inject_git_config(project_dir: Path) -> None:
     try:
         raw = source.read_text(encoding="utf-8")
     except OSError as exc:
-        warn(f"[WARN] Could not read {source}: {exc}. "
-             "Skipping git config injection.")
+        warn(
+            f"[WARN] Could not read {source}: {exc}. "
+            "Skipping git config injection."
+        )
         return
 
     content, stripped = _sanitize_gitconfig(raw)
@@ -388,11 +406,15 @@ def _inject_git_config(project_dir: Path) -> None:
         )
         return
 
-    info(f"[INFO] Injected host git configuration from {source} into the "
-         "ward sandbox.")
+    info(
+        f"[INFO] Injected host git configuration from {source} into the "
+        "ward sandbox."
+    )
     if stripped:
-        info("[INFO] Stripped host-only directives during injection: "
-             + ", ".join(stripped))
+        info(
+            "[INFO] Stripped host-only directives during injection: "
+            + ", ".join(stripped)
+        )
 
     name, email = _verify_git_identity(project_dir)
     if name and email:

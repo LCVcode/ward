@@ -33,7 +33,7 @@ EXIT_CONTAINER_EXISTS = 80
 # Ward-managed files, in removal-report order.
 _WARD_FILES = (
     manifest.MANIFEST_FILENAME,  # workshop.yaml
-    ".workshop.lock",            # workshop CLI local state pin
+    ".workshop.lock",  # workshop CLI local state pin
 )
 
 
@@ -85,8 +85,10 @@ def run() -> None:
 
     _clean_gitignore(cwd)
 
-    info("[INFO] ward files cleaned. Run 'ward init' to re-provision this "
-         "project.")
+    info(
+        "[INFO] ward files cleaned. Run 'ward init' to re-provision this "
+        "project."
+    )
 
 
 def _clean_gitignore(project_dir: Path) -> None:
@@ -97,7 +99,7 @@ def _clean_gitignore(project_dir: Path) -> None:
     existing = target.read_text(encoding="utf-8")
     if GITIGNORE_BLOCK_BEGIN not in existing:
         return
-    # Strip the block including its surrounding newline, leaving the rest intact.
+    # Strip the block including its surrounding newline, leaving the rest.
     cleaned = re.sub(
         rf"\n?{re.escape(GITIGNORE_BLOCK_BEGIN)}\n.*?{re.escape(GITIGNORE_BLOCK_END)}\n?",
         "",

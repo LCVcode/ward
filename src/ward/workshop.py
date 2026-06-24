@@ -14,28 +14,28 @@ from __future__ import annotations
 
 import shlex
 import subprocess
+from collections.abc import Sequence
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
-from typing import Sequence
 
 # Hardcoded by ward — exactly one workshop per project, always named "ward".
 WORKSHOP_NAME = "ward"
 
 
-class State(str, Enum):
+class State(StrEnum):
     """Lifecycle states recognised by Canonical Workshop.
 
     Values mirror the literal strings printed by ``workshop list``.
     """
 
-    OFF = "Off"           # Not launched
-    PENDING = "Pending"   # Transitional (launching/refreshing)
-    STOPPED = "Stopped"   # Launched but not running
-    READY = "Ready"       # Running and accepting actions
-    WAITING = "Waiting"   # Running but waiting on something
-    UNKNOWN = "Unknown"   # Could not classify the printed status
-    MISSING = "Missing"   # No workshop.yaml in the project (not a project)
+    OFF = "Off"  # Not launched
+    PENDING = "Pending"  # Transitional (launching/refreshing)
+    STOPPED = "Stopped"  # Launched but not running
+    READY = "Ready"  # Running and accepting actions
+    WAITING = "Waiting"  # Running but waiting on something
+    UNKNOWN = "Unknown"  # Could not classify the printed status
+    MISSING = "Missing"  # No workshop.yaml in the project (not a project)
 
 
 @dataclass
@@ -125,21 +125,30 @@ def query_state(project_dir: Path) -> tuple[State, CommandResult]:
 
 # ---------- lifecycle actions ----------
 
+
 def launch(project_dir: Path, timeout: float | None = None) -> CommandResult:
     """Construct the workshop from its manifest. Auto-starts on success."""
-    return _run(["launch", WORKSHOP_NAME, "-p", str(project_dir)], timeout=timeout)
+    return _run(
+        ["launch", WORKSHOP_NAME, "-p", str(project_dir)], timeout=timeout
+    )
 
 
 def start(project_dir: Path, timeout: float | None = None) -> CommandResult:
-    return _run(["start", WORKSHOP_NAME, "-p", str(project_dir)], timeout=timeout)
+    return _run(
+        ["start", WORKSHOP_NAME, "-p", str(project_dir)], timeout=timeout
+    )
 
 
 def stop(project_dir: Path, timeout: float | None = None) -> CommandResult:
-    return _run(["stop", WORKSHOP_NAME, "-p", str(project_dir)], timeout=timeout)
+    return _run(
+        ["stop", WORKSHOP_NAME, "-p", str(project_dir)], timeout=timeout
+    )
 
 
 def remove(project_dir: Path, timeout: float | None = None) -> CommandResult:
-    return _run(["remove", WORKSHOP_NAME, "-p", str(project_dir)], timeout=timeout)
+    return _run(
+        ["remove", WORKSHOP_NAME, "-p", str(project_dir)], timeout=timeout
+    )
 
 
 def remount(
@@ -190,7 +199,7 @@ def refresh(
     project_dir: Path,
     timeout: float | None = None,
 ) -> CommandResult:
-    """Refresh ward's workshop in ``project_dir`` against its current definition."""
+    """Refresh ward's workshop in ``project_dir`` against its definition."""
     return _run(
         ["refresh", WORKSHOP_NAME, "-p", str(project_dir)],
         timeout=timeout,
@@ -198,6 +207,7 @@ def refresh(
 
 
 # ---------- in-workshop file writes ----------
+
 
 def write_file(
     target_path: str,
@@ -219,10 +229,15 @@ def write_file(
     """
     proc = subprocess.run(
         [
-            "workshop", "exec", "-I",
-            "-p", str(project_dir),
+            "workshop",
+            "exec",
+            "-I",
+            "-p",
+            str(project_dir),
             WORKSHOP_NAME,
-            "--", "tee", target_path,
+            "--",
+            "tee",
+            target_path,
         ],
         input=content,
         capture_output=True,
@@ -250,10 +265,14 @@ def exec_capture(
     """
     proc = subprocess.run(
         [
-            "workshop", "exec", "-I",
-            "-p", str(project_dir),
+            "workshop",
+            "exec",
+            "-I",
+            "-p",
+            str(project_dir),
             WORKSHOP_NAME,
-            "--", *argv,
+            "--",
+            *argv,
         ],
         capture_output=True,
         text=True,
@@ -268,6 +287,7 @@ def exec_capture(
 
 
 # ---------- handoff ----------
+
 
 def run_action_argv(action: str) -> list[str]:
     """Build the argv used to hand off control to ``workshop run``.

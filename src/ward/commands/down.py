@@ -21,7 +21,11 @@ def run() -> None:
     cwd = Path.cwd()
 
     state, _ = workshop.query_state(cwd)
-    if state in (workshop.State.MISSING, workshop.State.OFF, workshop.State.STOPPED):
+    if state in (
+        workshop.State.MISSING,
+        workshop.State.OFF,
+        workshop.State.STOPPED,
+    ):
         info("[INFO] Container 'ward' is already down.")
         return
 

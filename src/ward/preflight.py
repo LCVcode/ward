@@ -168,11 +168,11 @@ def _ssh_sock_failure() -> PreflightFailure | None:
             EXIT_SSH_SOCK,
             "[ERROR] SSH_AUTH_SOCK is not set in this shell, so ward "
             "cannot wire your SSH agent into the workshop. Start an agent "
-            "and load your key with: 'eval \"$(ssh-agent -s)\" && "
+            'and load your key with: \'eval "$(ssh-agent -s)" && '
             "ssh-add', then re-run.",
         )
     try:
-        st = os.stat(sock)
+        st = Path(sock).stat()
     except OSError as exc:
         return PreflightFailure(
             EXIT_SSH_SOCK,
@@ -185,7 +185,7 @@ def _ssh_sock_failure() -> PreflightFailure | None:
             EXIT_SSH_SOCK,
             f"[ERROR] SSH_AUTH_SOCK points at '{sock}' but that path is "
             "not a Unix socket. Start a fresh agent with: 'eval "
-            "\"$(ssh-agent -s)\" && ssh-add', then re-run.",
+            '"$(ssh-agent -s)" && ssh-add\', then re-run.',
         )
     return None
 
@@ -284,7 +284,7 @@ def _git_identity_warning() -> PreflightWarning | None:
     return PreflightWarning(
         "[WARN] Host git identity is not set (user.name and user.email "
         "are both empty). Commits inside the workshop will be anonymous. "
-        "Set with: 'git config --global user.name \"Your Name\" && git "
+        'Set with: \'git config --global user.name "Your Name" && git '
         "config --global user.email you@example.com'."
     )
 

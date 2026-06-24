@@ -43,12 +43,15 @@ def _report_ssh_agent(project_dir: Path) -> None:
     """
     result = workshop.connections(project_dir)
     if not result.ok:
-        info("[INFO] Could not query interface connections "
-             "('workshop connections ward' failed).")
+        info(
+            "[INFO] Could not query interface connections "
+            "('workshop connections ward' failed)."
+        )
         return
 
     rows = [
-        line for line in result.stdout.splitlines()
+        line
+        for line in result.stdout.splitlines()
         if _SSH_AGENT_MARKER in line.lower()
     ]
     if len(rows) != 1:
@@ -59,8 +62,10 @@ def _report_ssh_agent(project_dir: Path) -> None:
 
     # A trailing '-' token means the slot is empty (not connected).
     if rows[0].split()[-1] == "-":
-        info("[INFO] SSH agent: not connected. Run 'ward up' to wire it "
-             "(git over SSH inside the sandbox will fail until then).")
+        info(
+            "[INFO] SSH agent: not connected. Run 'ward up' to wire it "
+            "(git over SSH inside the sandbox will fail until then)."
+        )
     else:
         info("[INFO] SSH agent: connected.")
 
@@ -72,8 +77,10 @@ def run() -> None:
     state, result = workshop.query_state(cwd)
 
     if state is workshop.State.MISSING:
-        info("[INFO] No ward workshop is provisioned for this project. "
-             "Run 'ward init' to set one up.")
+        info(
+            "[INFO] No ward workshop is provisioned for this project. "
+            "Run 'ward init' to set one up."
+        )
         return
 
     if state is workshop.State.UNKNOWN:
