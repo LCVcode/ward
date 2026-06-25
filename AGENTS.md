@@ -14,6 +14,25 @@ Guidance for AI agents working **on the `ward` codebase itself**.
 **OpenCode** agent sessions. It ships as a single global **classic snap**
 binary. Subcommands: `init`, `up`, `down`, `clean`, `purge`.
 
+## Design Philosophy
+
+**ward is a thin layer. The thinner the better.**
+
+- ward is an **orchestration shim** over the `workshop` CLI. It should add
+  as little code and as few moving parts as possible. Behavior that belongs
+  to `workshop`, `snap`, or the OS stays there — ward delegates, it does not
+  reimplement.
+- **Strong preference for the Python standard library** over third-party
+  dependencies. Reach for built-ins (`argparse`, `subprocess`, `pathlib`,
+  `dataclasses`, `enum`, `shutil`, etc.) before considering anything on PyPI.
+- A **new runtime dependency is a last resort.** It must be genuinely
+  unavoidable, justified explicitly in the PR, and approved. The current
+  runtime surface is a single dependency (`pyyaml`); keep it that way unless
+  there is no reasonable stdlib path.
+- Prefer **deleting code over adding it**, and composing built-ins over
+  introducing abstractions. When a change can be made smaller, make it
+  smaller.
+
 ## Setup & Dev Loop
 
 - Python **>=3.12** (pinned in `.python-version`).
@@ -23,6 +42,9 @@ binary. Subcommands: `init`, `up`, `down`, `clean`, `purge`.
   - `uv run src/ward/cli.py <subcommand>`
 - Run tests:
   - `uv run pytest`
+- Lint & type-check (configured in `pyproject.toml`):
+  - `uv run ruff check .`
+  - `uv run ty check`
 - Build/install the snap (the real distribution path):
   - `snapcraft pack --use-lxd` then
     `sudo snap install --classic --dangerous ./ward_*.snap`
@@ -70,6 +92,56 @@ Never call it directly from command modules.
   `workshop.yaml` and `.workshop.lock`.
 - `manifest.py` refuses any manifest whose `name:` is not `ward`.
 
+## Versioning
+
+ward follows **Semantic Versioning**. Every change that lands bumps the
+version **in the same commit/PR** as the change itself — there is no separate
+"release" commit. Bump the version in **both** `pyproject.toml` and
+`src/ward/__init__.py` together (see Invariants & Gotchas).
+
+### What counts as ward's public contract
+
+A change is **breaking** only if it alters observable behavior that a user or
+script depends on. ward's public surface is:
+
+- **Exit codes** (the `EXIT_*` constants / README "Exit codes" table).
+- **CLI surface**: subcommand names, flags, and their semantics.
+- **Generated artifacts**: the structure/schema of the templated
+  `workshop.yaml` and `AGENTS.md`, including invariants like `name: ward`
+  and the file layout that `clean` / `purge` rely on.
+- **Documented behavior** of `init` / `up` / `down` / `clean` / `purge`.
+
+Internal refactors, private helpers, docstrings, tests, and comments are
+**not** part of the contract.
+
+### Bump rules
+
+ward is **pre-1.0** (`0.y.z`), so there is no stability guarantee yet and the
+major component stays `0`. We use the common "shift-down" convention while
+pre-1.0:
+
+| Change | Pre-1.0 (current) | Post-1.0 |
+| --- | --- | --- |
+| Breaking change to a public contract above | **MINOR** (`0.y+1.0`) | MAJOR (`x+1.0.0`) |
+| New backward-compatible feature, subcommand, or flag | **PATCH** (`0.y.z+1`) | MINOR (`0.y+1.0`) |
+| Bug fix, docs, refactor — no behavior change | **PATCH** (`0.y.z+1`) | PATCH (`x.y.z+1`) |
+
+So **while pre-1.0**: a breaking change bumps the **minor**; everything else
+bumps the **patch**.
+
+### Commit-prefix mapping
+
+The repo uses Conventional Commits. Map the prefix to the bump:
+
+- `fix:` → patch
+- `feat:` → patch (pre-1.0) / minor (post-1.0)
+- `feat!:` or a `BREAKING CHANGE:` footer → minor (pre-1.0) / major (post-1.0)
+- `docs:`, `refactor:`, `test:`, `chore:`, `ci:` → patch (or no bump if
+  nothing user-visible ships)
+
+Any change to exit codes or generated artifacts is **breaking** — bump the
+minor (pre-1.0) **and** sync the README in the same commit.
+
 ## Testing
 
 - Framework: **pytest** + **pytest-mock** (declared under the `dev` extra).
@@ -80,6 +152,7 @@ Never call it directly from command modules.
 
 ## Agent Notes
 
-- No CI, linter, or formatter is currently wired up. Match the existing style.
+- Ruff (`ruff check`), ty (`ty check`), and pytest run in GitHub Actions on
+  push/PR. Keep all three green; match the existing style.
 - `README.md` is the single source of truth for documentation (there is no
   `docs/` directory and no `CONTRIBUTING.md`).
