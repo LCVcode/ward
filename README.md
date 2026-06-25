@@ -68,9 +68,11 @@ actions:
 
 ## Requirements
 
-`ward init` and `ward up` validate every hard requirement before doing
-anything. If a check fails you get a single actionable error line and a
-non-zero exit code — ward never tries to auto-fix your host.
+`ward up` validates every hard requirement before doing anything; `ward
+init` validates only the two it depends on (R6 plus manifest-name
+validity), since it merely writes project files. If a check fails you
+get a single actionable error line and a non-zero exit code — ward never
+tries to auto-fix your host.
 
 ### Hard requirements (ward refuses to run)
 
@@ -81,7 +83,7 @@ non-zero exit code — ward never tries to auto-fix your host.
 | R3 | `git` CLI on PATH | `sudo apt install git` |
 | R4 | User in the `lxd` group (or UID 0) | `sudo usermod -aG lxd "$USER"`, then log out / `newgrp lxd` |
 | R5 | `~/.config/opencode/` exists | `opencode /connect` on the host first |
-| R6 | Current directory is a Git repository | `git init` (only checked by `ward init` / `ward up`) |
+| R6 | Current directory is a Git repository | `git init` (checked by `ward init` and `ward up`) |
 | R7 | `SSH_AUTH_SOCK` set in the shell and points at a live Unix socket | `eval "$(ssh-agent -s)" && ssh-add` |
 | R8 | `SSH_AUTH_SOCK` also present in the **systemd user environment** | `systemctl --user import-environment SSH_AUTH_SOCK` |
 
@@ -104,15 +106,18 @@ Without R10 commits inside the workshop will be anonymous.
 
 | Command | Tier | Checks |
 |---|---|---|
-| `ward init` | full | R1–R10 |
-| `ward up` | full | R1–R10 |
+| `ward init` | tailored | R6 (+ existing manifest must be named `ward`) |
+| `ward up` | full / minimal | R1–R10 on cold start; only R1, R4 when reconnecting to a running workshop |
 | `ward status` | minimal | R1, R4 |
 | `ward down` | minimal | R1, R4 |
 | `ward clean` | minimal | R1, R4 |
 | `ward purge` | minimal | R1, R4 |
 
-Lifecycle commands stay minimal so you can still tear things down when
-the host's SSH/git setup is broken.
+`ward init` only writes project files, so it checks just R6 (and that
+any existing `workshop.yaml` is named `ward`); the workshop/lxd/SSH
+requirements are enforced by `ward up`, which is what actually needs
+them. Lifecycle commands stay minimal so you can still tear things down
+when the host's SSH/git setup is broken.
 
 ## Installation
 
@@ -155,25 +160,38 @@ ward up       # launches the workshop and hands off to OpenCode inside it
 ward down     # when you're done, frees host CPU/memory
 ```
 
-If any of R1–R8 isn't satisfied, `ward init` prints exactly what's
-missing and how to fix it, then exits. Fix, re-run.
+If R6 isn't satisfied (or an existing `workshop.yaml` has the wrong
+`name:`), `ward init` prints exactly what's missing and how to fix it,
+then exits. The remaining requirements (R1–R5, R7–R8) are enforced by
+`ward up`. Fix, re-run.
 
 ## Commands
 
 ### `ward init`
 
-Provisions the project. Validates the full preflight, then writes
-`workshop.yaml` (canonical blueprint with the `ssh-agent` plug on the
-`opencode` SDK), seeds `AGENTS.md` (if missing), and adds the
+Provisions the project. Validates that the current directory is a Git
+repository (and that any existing `workshop.yaml` is named `ward`), then
+writes `workshop.yaml` (canonical blueprint with the `ssh-agent` plug on
+the `opencode` SDK), seeds `AGENTS.md` (if missing), and adds the
 `ward-managed-begin`/`-end` block to `.gitignore`.
 
-Exits 64 (no git repo), 65 (no opencode config), 73 (existing
-`workshop.yaml` with wrong `name:`), 77 (lxd group), 78 (SSH socket),
-79 (systemd user env), 127 (missing binary).
+Exits 64 (no git repo) or 73 (existing `workshop.yaml` with wrong
+`name:`). The workshop/lxd/opencode/SSH preconditions are deferred to
+`ward up`.
 
 ### `ward up`
 
-The main entry point. Idempotent.
+The main entry point. Idempotent — and instant to re-enter.
+
+If the workshop is already running (`Ready`), `ward up` skips straight to
+the OpenCode handoff: no stop, remount, or restart. This is the common
+case after you Ctrl+C out of OpenCode but leave the VM running, so
+reconnecting is essentially instant. The reconnect path runs only the
+MINIMAL preflight (R1, R4), so a running session stays reachable even if
+the host's SSH wiring lapsed since launch. To force a fresh hydration
+(e.g. after changing host config), run `ward down` then `ward up`.
+
+From any non-running state it runs the full cold-start sequence:
 
 1. Runs the full preflight (R1–R10).
 2. Auto-generates `workshop.yaml` if missing.
@@ -230,12 +248,18 @@ because something inside the VM is holding files.
 
 ### Lifecycle
 
-`ward up` always drives the workshop into `Stopped` before remounting,
-because `workshop remount` only operates safely on a stopped workshop
-unless the source happens to be on the same filesystem (which we don't
-assume). After remount it `start`s the workshop, then runs the
-manual-connect interfaces (just `ssh-agent` today), then the injection
-steps, then `execvp`s into the OpenCode TUI.
+When the workshop is already `Ready`, `ward up` short-circuits straight
+to the OpenCode handoff — no stop, remount, or restart — so reconnecting
+after a Ctrl+C is instant. The mounts, the ssh-agent connection, and the
+injected gitconfig all persist while the VM stays up, so there is nothing
+to redo.
+
+From a non-running state, `ward up` always drives the workshop into
+`Stopped` before remounting, because `workshop remount` only operates
+safely on a stopped workshop unless the source happens to be on the same
+filesystem (which we don't assume). After remount it `start`s the
+workshop, then runs the manual-connect interfaces (just `ssh-agent`
+today), then the injection steps, then `execvp`s into the OpenCode TUI.
 
 ### Mount bridge
 

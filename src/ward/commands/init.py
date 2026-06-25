@@ -1,9 +1,12 @@
 """``ward init`` — provision the project for ward.
 
 Behaviour:
-- Run the FULL preflight (host binaries, lxd group, opencode config,
-  git repo, SSH agent + systemd user env; soft warnings for keys + git
-  identity).
+- Run a tailored, minimal precondition check. ``init`` only writes
+  project files (it never touches the workshop daemon, lxd, or the SSH
+  agent), so it validates exactly two things: that the current directory
+  is a Git repository, and that any existing workshop.yaml is named
+  ``ward``. All workshop/lxd/opencode/SSH plumbing is deferred to
+  ``ward up``, which is the command that actually depends on it.
 - Refuse to operate on an existing workshop.yaml whose name is not
   ``ward`` (exit 73).
 - Generate the canonical workshop.yaml if absent.
@@ -22,8 +25,7 @@ from ward import manifest
 from ward.errors import info
 from ward.preflight import (
     PreflightFailure,
-    Tier,
-    collect_failures,
+    git_repo_failure,
     report_and_exit,
 )
 
@@ -118,12 +120,18 @@ def run() -> None:
     cwd = Path.cwd()
 
     # Phase 1: validate every precondition. Exit with full diagnostics
-    # before any project file is created or modified.
-    failures, warnings = collect_failures(tier=Tier.FULL, project_dir=cwd)
+    # before any project file is created or modified. init only writes
+    # project files, so it checks just the two things it depends on: a
+    # Git root, and a correctly-named existing manifest. Everything else
+    # (workshop/lxd/SSH plumbing) is enforced by 'ward up'.
+    failures: list[PreflightFailure] = []
+    repo_fail = git_repo_failure(cwd)
+    if repo_fail is not None:
+        failures.append(repo_fail)
     manifest_fail = _manifest_failure(cwd)
     if manifest_fail is not None:
         failures.append(manifest_fail)
-    report_and_exit(failures, warnings)
+    report_and_exit(failures, [])
 
     # Phase 2: mutations. Only reached when every hard check passed.
     _write_manifest_if_missing(cwd)

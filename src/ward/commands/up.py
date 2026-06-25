@@ -1,13 +1,29 @@
 """``ward up`` — bring the sandboxed OpenCode session online.
 
-Lifecycle (matches README "How it works"):
-1. Ensure workshop.yaml exists in the project (auto-generate if missing).
-2. Query the container's state via the workshop CLI.
-3. Reconcile state: ``Off`` → launch; ``Stopped`` → start; ``Ready`` → pass.
+Two paths, chosen by the workshop's current state:
+
+**Reconnect (fast path).** When the workshop is already ``Ready`` (e.g.
+you Ctrl+C'd out of OpenCode but the VM kept running), a previous
+``ward up`` has already launched, hydrated, and wired it. Re-entering
+only needs a handoff, so ward skips the entire stop → remount → start →
+connect → inject cycle and ``execvp``s straight into OpenCode. This path
+runs only the MINIMAL preflight (binary + lxd group) so a running
+session stays reachable even if the host's SSH wiring lapsed since
+launch.
+
+**Cold start / resume (full path).** From any non-running state the full
+sequence runs:
+1. Run the FULL preflight (the SSH wiring is needed to set the VM up).
+2. Ensure workshop.yaml exists in the project (auto-generate if missing).
+3. Reconcile state: ``Off`` → launch; ``Stopped``/``Waiting`` → handled.
 4. Run the hydration loop: stop → remount config + data → start.
 5. Connect the ssh-agent plug (manual-connect interface).
 6. Inject (sanitized) host gitconfig into the workshop.
 7. Hand off control with ``workshop run ward opencode`` (replaces process).
+
+To force a fresh hydration after changing host config, run ``ward down``
+(which stops the VM) and then ``ward up`` — the next launch sees a
+stopped workshop and takes the full path.
 """
 
 from __future__ import annotations
@@ -436,6 +452,33 @@ def _inject_git_config(project_dir: Path) -> None:
 
 def run() -> None:
     cwd = Path.cwd()
+
+    # MINIMAL preflight first: querying state needs the workshop binary
+    # (R1) and lxd access (R4), but nothing more. The heavier SSH/config
+    # checks only matter on the cold path, where ward actually wires the
+    # VM — so we defer FULL until we know we need it.
+    run_preflight(tier=Tier.MINIMAL)
+
+    state, result = workshop.query_state(cwd)
+    if state is workshop.State.UNKNOWN:
+        die(
+            EXIT_STATUS_QUERY_FAILED,
+            "[ERROR] Failed to query Canonical Workshop status. Verify your "
+            "user belongs to the 'lxd' group or try restarting the system "
+            "container daemon."
+            + (f"\n{result.stderr.strip()}" if result.stderr.strip() else ""),
+        )
+
+    # Fast path: the VM is already running and (within a ward-managed
+    # lifecycle) already hydrated and wired. Re-enter instantly — no
+    # stop/remount/start/connect/inject churn.
+    if state is workshop.State.READY:
+        info("[INFO] Reconnecting to the running ward sandbox...")
+        _handoff()  # execvp — replaces this process; nothing after runs.
+        return  # pragma: no cover — unreachable once execvp succeeds.
+
+    # Cold start / resume: enforce the FULL preflight (SSH wiring is about
+    # to happen), then run the complete hydration sequence.
     run_preflight(tier=Tier.FULL, project_dir=cwd)
     _ensure_manifest(cwd)
     _ensure_launched_and_stopped(cwd)

@@ -13,9 +13,14 @@ Two tiers, exposed via :func:`run_preflight`:
 - ``Tier.MINIMAL`` — bare-minimum host sanity. Used by lifecycle
   commands that must remain usable when the host's SSH/git setup is
   broken (``sleep``, ``clean``, ``purge``).
-- ``Tier.FULL`` — every hard check plus soft warnings. Used by ``init``
-  and ``up`` so first-launch errors surface immediately rather than
-  during the long hydration loop.
+- ``Tier.FULL`` — every hard check plus soft warnings. Used by ``up``
+  so first-launch errors surface immediately rather than during the
+  long hydration loop.
+
+``init`` does not use either tier: it only writes project files and so
+runs a tailored, minimal check (just :func:`git_repo_failure`, plus its
+own manifest-name validation). All workshop/lxd/SSH plumbing is deferred
+to ``up``, which is the command that actually depends on it.
 
 Never auto-fixes anything: every failure prints an actionable
 remediation command and exits.
@@ -149,7 +154,7 @@ def _opencode_config_failure() -> PreflightFailure | None:
     )
 
 
-def _git_repo_failure(project_dir: Path) -> PreflightFailure | None:
+def git_repo_failure(project_dir: Path) -> PreflightFailure | None:
     if (project_dir / ".git").is_dir():
         return None
     return PreflightFailure(
@@ -346,7 +351,7 @@ def collect_failures(
         failures.append(opencode_cfg_fail)
 
     if project_dir is not None:
-        repo_fail = _git_repo_failure(project_dir)
+        repo_fail = git_repo_failure(project_dir)
         if repo_fail:
             failures.append(repo_fail)
 
