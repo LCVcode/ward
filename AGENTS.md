@@ -152,6 +152,9 @@ minor (pre-1.0) **and** sync the README in the same commit.
 
 ## Agent Notes
 
+- See **`SKILLS.md`** for external agent skills to use on `workshop`-related
+  tasks (notably the upstream `use-workshop` skill). Reference them by URL;
+  do not vendor them into this repo.
 - Ruff (`ruff check`), ty (`ty check`), and pytest run in GitHub Actions on
   push/PR. Keep all three green; match the existing style.
 - `README.md` is the single source of truth for documentation (there is no
