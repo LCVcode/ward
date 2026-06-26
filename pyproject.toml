@@ -7,6 +7,8 @@ name = "ward"
 version = "0.1.6"
 description = "Infrastructure coordinator for Canonical Workshop VMs and OpenCode agents"
 readme = "README.md"
+license = "GPL-3.0-or-later"
+license-files = ["LICENSE"]
 requires-python = ">=3.12"
 dependencies = [
     "pyyaml>=6.0",

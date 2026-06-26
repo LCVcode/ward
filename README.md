@@ -379,3 +379,8 @@ Per-project, written by `ward init`:
 - `.workshop.lock` — workshop CLI local state pin (gitignored).
 - `.gitignore` — gets a `# ward-managed-begin`/`# ward-managed-end`
   block appended; `ward clean` removes the block in place.
+
+## License
+
+`ward` is licensed under the GNU General Public License v3.0 or later
+(GPL-3.0-or-later). See [LICENSE](LICENSE) for the full text.
