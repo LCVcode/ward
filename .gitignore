@@ -12,3 +12,7 @@ wheels/
 # Snap build artifacts
 snap/.snapcraft/
 *.snap
+
+# ward runtime artifacts (per-project workshop state)
+workshop.yaml
+.workshop.lock
